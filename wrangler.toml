@@ -5,4 +5,4 @@ compatibility_date = "2026-07-09"
 [[d1_databases]]
 binding = "DB"
 database_name = "petclub-tool-db"
-database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+database_id = "06d4f691-746e-4f1f-ae5c-6fb6d6c48af3"
