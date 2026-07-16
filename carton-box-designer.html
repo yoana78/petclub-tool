@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CARTON DESIGNER / 카톤 설계 & 적재 최적화 시스템</title>
+<script>
+    fetch('/api/me', { credentials: 'include' }).then((r) => {
+        if (!r.ok) location.replace('login.html');
+    });
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- jsPDF CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<style>
+  :root{
+    --bg: #F8FAFC;
+    --panel: #FFFFFF;
+    --panel-2: #F1F5F9;
+    --line: #E2E8F0;
+    --line-soft: #F1F5F9;
+    --ink: #0F172A;
+    --ink-dim: #334155;
+    --ink-faint: #64748B;
+    --amber: #D97706;
+    --amber-dim: #FEF3C7;
+    --cyan: #0284C7;
+    --cyan-dim: #E0F2FE;
+    /* carton kraft brown — 가로 배치 / 세로 배치(90° 회전) */
+    --box-a: #D2A06A;
+    --box-a-line: #F8C690;
+    --box-b: #B88650;
+    --box-b-line: #DEAC76;
+    /* inbox (제품) inside the carton */
+    --inbox: #E8C49B;
+    --inbox-line: #A9762F;
+    --danger: #EF4444;
+    --good: #10B981;
+    --radius: 6px;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans KR', sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
+  body{
+    background-image:
+      linear-gradient(rgba(226, 232, 240, 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-attachment: fixed;
+    min-height:100vh;
+  }
+  .app{ max-width:1380px; margin:0 auto; padding:24px 20px 60px; }
+
+  /* Header */
+  .head{ display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+  .head-left{ display:flex; align-items:center; gap:12px; }
+  .head-left .logo{ font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:0.2em; color:var(--cyan); border:2px solid var(--cyan); padding:4px 8px; border-radius:4px; background:#FFFFFF; }
+  .head-left h1{ margin:0; font-size:22px; font-weight:700; letter-spacing:-0.02em; color:var(--ink); }
+  .head-left .sub{ font-size:12px; color:var(--ink-faint); font-family:var(--mono); margin-left:8px; }
+  .head-right{ display:flex; gap:8px; }
+
+  /* Layout */
+  .layout{ display:grid; grid-template-columns: 360px 1fr; gap:20px; align-items:start; }
+  @media (max-width: 1024px){ .layout{ grid-template-columns: 1fr; } }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,0.02); overflow:hidden; }
+  .panel-title{ font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:0.05em; color:var(--ink-dim); padding:12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; background:var(--panel-2); }
+  .panel-title .sub-tag{ font-family:var(--mono); color:var(--ink-faint); font-size:10px; font-weight:400; }
+
+  /* Form Control */
+  .field{ padding:14px 16px; border-bottom:1px solid var(--line-soft); }
+  .field:last-child{ border-bottom:none; }
+  .field label.title{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-dim); margin-bottom:8px; font-weight:600; }
+  .field .hint{ font-size:11px; color:var(--ink-faint); margin-top:6px; line-height:1.5; }
+
+  select, input[type=number], input[type=text]{
+    width:100%; background:var(--panel); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--sans); font-size:13.5px; padding:8px 10px; border-radius:4px; outline:none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  select:focus, input:focus{ border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.08); }
+  select:disabled, input:disabled{ color:var(--ink-faint); background:var(--panel-2); border-color:var(--line); cursor:not-allowed; opacity: 0.7; }
+
+  .dims{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; }
+  .dims .d{ position:relative; }
+  .dims .d span.tag{ position:absolute; top:-7px; left:8px; background:var(--panel); padding:0 4px; font-size:9.5px; color:var(--ink-faint); font-family:var(--mono); letter-spacing:0.05em; }
+  .dims input{ text-align:center; font-family:var(--mono); padding-top:9px; }
+
+  .grid-arr{ display:grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap:6px; align-items:center; }
+  .grid-arr input{ text-align:center; font-family:var(--mono); }
+  .grid-arr span{ font-size:11px; color:var(--ink-faint); font-family:var(--mono); }
+
+  .slider-row{ display:flex; align-items:center; gap:10px; }
+  input[type=range]{ flex:1; -webkit-appearance:none; height:3px; background:var(--line); border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--cyan); border:2px solid var(--panel); cursor:pointer; margin-top:-1px; }
+  input[type=range]::-moz-range-thumb{ width:14px; height:14px; border-radius:50%; background:var(--cyan); border:2px solid var(--panel); cursor:pointer; }
+  
+  .checkbox-row{ display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer; user-select:none; }
+  .checkbox-row input{ width:15px; height:15px; accent-color:var(--cyan); }
+  .checkbox-row span{ font-size:12px; color:var(--ink-dim); }
+
+  /* Buttons */
+  .btn{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:4px; border:1px solid var(--line); background:#FFFFFF; color:var(--ink-dim); cursor:pointer; transition: all .15s; }
+  .btn:hover{ border-color:var(--ink-faint); color:var(--ink); background:var(--panel-2); }
+  .btn.primary{ background:var(--cyan); border-color:var(--cyan); color:#FFFFFF; }
+  .btn.primary:hover{ background:#0274ae; border-color:#0274ae; }
+  .btn.accent{ background:var(--amber); border-color:var(--amber); color:#FFFFFF; }
+  .btn.accent:hover{ background:#b45309; border-color:#b45309; }
+  .btn-sm{ padding:4px 8px; font-size:11px; }
+
+  /* Main Area */
+  main{ display:flex; flex-direction:column; gap:20px; }
+  .warn-box{ display:none; background:rgba(239,68,68,0.06); border:1px solid var(--danger); color:var(--danger); font-size:12.5px; padding:12px 14px; border-radius:4px; font-family:var(--mono); }
+  .warn-box.show{ display:block; }
+
+  /* Dashboard Panel */
+  .dashboard{ display:grid; grid-template-columns: repeat(4, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  @media (max-width: 1280px){ .dashboard{ grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 768px){ .dashboard{ grid-template-columns: 1fr; } }
+  .dash-card{ background:var(--panel); padding:16px 20px; display:flex; flex-direction:column; justify-content:center; }
+  .dash-card.main{ background:rgba(217, 119, 6, 0.03); }
+  .dash-card.accent{ background:rgba(2, 132, 199, 0.03); }
+  .dash-lbl{ font-size:11.5px; color:var(--ink-faint); font-weight:500; margin-bottom:8px; letter-spacing:0.05em; }
+  .dash-val-large{ font-family:var(--mono); font-size:26px; font-weight:700; color:var(--amber); line-height:1.1; }
+  .dash-val-large.cyan{ color:var(--cyan); }
+  .dash-val{ font-family:var(--mono); font-size:20px; font-weight:600; color:var(--ink); line-height:1.1; }
+  .dash-sub{ font-size:11px; color:var(--ink-faint); margin-top:4px; font-family:var(--mono); }
+
+  /* Visualizers Section */
+  .viz-container{ display:grid; grid-template-columns: 1.25fr 1fr; gap:20px; }
+  @media (max-width: 1024px){ .viz-container{ grid-template-columns: 1fr; } }
+
+  .viz-card{ padding:16px; }
+  .viz-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .viz-head h3{ margin:0; font-size:13px; font-weight:600; color:var(--ink-dim); display:flex; align-items:center; gap:6px; }
+  .pattern-badge{ font-family:var(--mono); font-size:10.5px; padding:3px 8px; border-radius:4px; border:1px solid var(--cyan-dim); color:var(--cyan); background:var(--cyan-dim); font-weight:600; }
+  
+  svg.viz{ width:100%; height:auto; display:block; }
+  .hero svg.viz{ background: radial-gradient(ellipse at 50% 30%, #FFFFFF 0%, #E2E8F0 78%); border-radius:4px; }
+  .legend{ display:flex; gap:16px; margin-top:10px; font-size:11px; color:var(--ink-faint); flex-wrap:wrap; }
+  .legend .li{ display:flex; align-items:center; gap:6px; }
+  .legend .sw{ width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .orient-strip{ display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--line-soft); }
+  .orient-strip .oi{ font-size:11.5px; color:var(--ink-dim); font-family:var(--mono); }
+  .orient-strip .oi b{ color:var(--cyan); font-weight:600; }
+
+  /* Canvas Drawing for Dieline */
+  .canvas-container{ display:flex; justify-content:center; align-items:center; background:#FAFAFA; border:1px solid var(--line); border-radius:4px; padding:20px; overflow:hidden; }
+  canvas#dielineCanvas{ max-width:100%; height:auto; background:#FFFFFF; display:block; border:1px solid var(--line-soft); }
+
+  /* History list styling */
+  .history-list{ max-height:160px; overflow-y:auto; border:1px solid var(--line-soft); border-radius:4px; background:var(--panel-2); padding:4px; margin-bottom:10px; }
+  .history-item{ display:flex; align-items:center; justify-content:space-between; padding:6px 8px; font-size:11.5px; border-bottom:1px solid var(--line-soft); cursor:pointer; border-radius:2px; transition: background .12s; }
+  .history-item:last-child{ border-bottom:none; }
+  .history-item:hover{ background:rgba(2, 132, 199, 0.05); }
+  .history-item .name{ font-weight:500; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; flex:1; }
+  .history-item .date{ font-family:var(--mono); color:var(--ink-faint); font-size:9.5px; margin-right:8px; }
+  .history-item .del-btn{ color:var(--danger); cursor:pointer; padding:2px; opacity:0.6; transition: opacity .12s; }
+  .history-item .del-btn:hover{ opacity:1; }
+
+  footer.note{ font-size:11px; color:var(--ink-faint); line-height:1.6; border-top:1px solid var(--line); padding-top:14px; margin-top:20px; }
+
+  /* print-only report header */
+  .print-head{ display:none; }
+
+  /* Job sheet — rendered straight from the live DOM via print CSS (A4). */
+  @media print {
+    @page{
+      size: A4 portrait;
+      /* margin:0 suppresses the browser's own header/footer (date, URL, page no.);
+         the page padding below supplies the real margins */
+      margin: 0;
+    }
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    html, body{ background:#FFFFFF !important; background-image:none !important; }
+    .app{ max-width:100% !important; padding:9mm 8mm !important; }
+    header.head, aside.panel, .btn, footer.note, .warn-box{ display:none !important; }
+    /* the sidebar is an input form; drop it and let the result use full width */
+    .layout{ display:block !important; }
+
+    .print-head{
+      display:flex !important; justify-content:space-between; align-items:baseline;
+      border-bottom:2px solid var(--cyan); padding-bottom:5px; margin-bottom:7px;
+    }
+    .print-head h2{ margin:0; font-size:13px; font-weight:700; color:var(--cyan); }
+    .print-head .meta{ font-family:var(--mono); font-size:8px; color:var(--ink-faint); }
+    #printSpec{
+      display:block !important; font-family:var(--mono); font-size:8px; color:var(--ink-dim);
+      border:1px solid var(--line); background:var(--panel-2); padding:4px 7px;
+      margin-bottom:7px; line-height:1.6;
+    }
+
+    /* squeeze the whole report onto one A4 page */
+    .dashboard{ grid-template-columns:repeat(4,1fr) !important; margin-bottom:7px !important;
+                page-break-inside:avoid !important; }
+    .dash-card{ padding:5px 7px !important; }
+    .dash-lbl{ font-size:7px !important; }
+    .dash-val{ font-size:11px !important; }
+    .dash-val-large{ font-size:13px !important; }
+    .dash-sub{ font-size:6.5px !important; }
+
+    .viz-container{ grid-template-columns:1.15fr 1fr !important; gap:7px !important;
+                    margin-bottom:7px !important; page-break-inside:avoid !important; }
+    .panel{ border:1px solid #CBD5E1 !important; box-shadow:none !important;
+            page-break-inside:avoid !important; }
+    .viz-card{ padding:6px !important; }
+    .viz-head{ margin-bottom:3px !important; }
+    .viz-head h3{ font-size:8.5px !important; }
+    .viz-head i{ display:none !important; }
+    .pattern-badge{ font-size:7px !important; padding:1px 4px !important; }
+    .legend{ font-size:6.5px !important; gap:7px !important; margin-top:3px !important; }
+    .orient-strip{ margin-top:4px !important; padding-top:4px !important; gap:7px !important; }
+    .orient-strip .oi{ font-size:7px !important; }
+    .canvas-container{ border:none !important; background:#FFFFFF !important; }
+
+    /* the inbox view is its own full-width row; the generic 2-col rule above
+       would otherwise strand it in the left column */
+    #inboxRow{ grid-template-columns:1fr !important; }
+
+    #isoSvg{ max-height:45mm !important; }
+    #inboxSvg{ max-height:38mm !important; max-width:150mm !important; }
+    #topSvg{ max-height:38mm !important; }
+    #sideSvg{ max-height:38mm !important; }
+    canvas#dielineCanvas{ width:100% !important; max-height:45mm !important;
+                          object-fit:contain !important; border:1px solid #CBD5E1 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="head">
+    <div class="head-left">
+      <span class="logo">BOX-OPT</span>
+      <div>
+        <h1>카톤 설계 & 팔레트 적재 시뮬레이터</h1>
+        <div class="sub">Carton Box Sizer & Pallet Loading Optimizer</div>
+      </div>
+    </div>
+    <div class="head-right">
+      <button class="btn primary" onclick="exportJobSheet()"><i data-lucide="file-text" style="width:14px;height:14px;"></i> 작업지시서 PDF</button>
+      <button class="btn accent" onclick="exportDielinePDF()"><i data-lucide="download" style="width:14px;height:14px;"></i> 칼선 PDF</button>
+    </div>
+  </header>
+
+  <!-- LAYOUT -->
+  <div class="layout">
+
+    <!-- INPUT SIDEBAR PANEL -->
+    <aside class="panel">
+      <!-- 00 · 히스토리 관리 -->
+      <div class="panel-title">설계 이력 관리 <span class="sub-tag">HISTORY</span></div>
+      <div class="field">
+        <div class="history-list" id="historyList">
+          <div style="text-align:center;color:var(--ink-faint);padding:10px;font-size:11px;">저장된 이력이 없습니다.</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-sm primary" onclick="saveCurrentDesign()" style="width:100%; justify-content:center;"><i data-lucide="save" style="width:12px;height:12px;"></i> 현재 설정을 이력에 저장</button>
+        </div>
+      </div>
+
+      <!-- 01 · 기본 정보 -->
+      <div class="panel-title">01 · 기본 정보 <span class="sub-tag">INFO</span></div>
+      <div class="field">
+        <label class="title"><i data-lucide="package" style="width:14px;height:14px;"></i> 제품명</label>
+        <input type="text" id="prodName" value="" placeholder="예: 프리미엄 세럼 포장상자">
+      </div>
+
+      <!-- 02 · 인박스 규격 -->
+      <div class="panel-title">02 · 인박스 규격 (내포장재) <span class="sub-tag">INBOX</span></div>
+      <div class="field">
+        <label class="title"><i data-lucide="box" style="width:14px;height:14px;"></i> 단품 박스 크기 (mm)</label>
+        <div class="dims">
+          <div class="d"><span class="tag">L</span><input type="number" id="inL" value="70"></div>
+          <div class="d"><span class="tag">W</span><input type="number" id="inW" value="50"></div>
+          <div class="d"><span class="tag">H</span><input type="number" id="inH" value="120"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="title"><i data-lucide="weight" style="width:14px;height:14px;"></i> 인박스 단품 중량 (kg)</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="inWeight" value="0.25" min="0" step="0.01" style="width:100px;font-family:var(--mono);text-align:right;">
+          <span style="font-size:12.5px;color:var(--ink-dim);">kg / 개</span>
+        </div>
+        <div class="hint">제품 1개(인박스)의 중량입니다. 카톤 중량 = 입수량 × 단품 중량.</div>
+      </div>
+
+      <!-- 03 · 포장 방식 -->
+      <div class="panel-title">03 · 카톤 입수 배치 <span class="sub-tag">ARRANGEMENT</span></div>
+      <div class="field">
+        <label class="checkbox-row">
+          <input type="checkbox" id="autoArrange" checked>
+          <span><b>최대 적재</b> (배열 자동 최적화)</span>
+        </label>
+        <div class="hint">체크 시 팔레트에 제품이 가장 많이 실리도록 카톤 입수 배열을 자동으로 찾습니다. 카톤 최대 중량을 넘지 않는 범위에서만 탐색합니다.</div>
+        <label class="checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="singleLayer" checked>
+          <span>포장 배열 1단 (높이 1개)</span>
+        </label>
+        <div class="hint">대부분의 경우 1단 배열입니다. 해제 시 높이 방향 다단 배열까지 탐색합니다.</div>
+      </div>
+      <div class="field">
+        <label class="title"><i data-lucide="grid" style="width:14px;height:14px;"></i> 포장 배열 (가로 × 세로 × 높이)</label>
+        <div class="grid-arr">
+          <input type="number" id="arrX" value="2" min="1">
+          <span>×</span>
+          <input type="number" id="arrY" value="3" min="1">
+          <span>×</span>
+          <input type="number" id="arrZ" value="1" min="1">
+        </div>
+        <div class="hint" id="arrHint">총 6개입 구성 (2 × 3 × 1)</div>
+      </div>
+
+      <!-- 04 · 여유 갭 및 골종류 -->
+      <div class="panel-title">04 · 제작 및 두께 조건 <span class="sub-tag">MATERIAL</span></div>
+      <div class="field">
+        <label class="title"><i data-lucide="sliders" style="width:14px;height:14px;"></i> 제품간 적재 유격 여유 (mm)</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="gap" value="3" min="0" step="0.5" style="width:100px;font-family:var(--mono);text-align:right;">
+          <span style="font-size:12.5px;color:var(--ink-dim);">mm</span>
+        </div>
+        <div class="hint">인박스 간의 공차 여유 간격입니다. (보통 2~3mm)</div>
+      </div>
+      <div class="field">
+        <label class="title"><i data-lucide="layers" style="width:14px;height:14px;"></i> 골 종류 (카톤박스 두께)</label>
+        <select id="fluteType">
+          <option value="A" selected>A골 (두께 5.0 mm)</option>
+          <option value="B">B골 (두께 3.0 mm)</option>
+          <option value="AB">AB골 (두께 8.0 mm)</option>
+        </select>
+        <div class="hint">골 종류별 조립 공차가 외경 사이즈에 자동 계산 및 반영됩니다.</div>
+      </div>
+      <div class="field">
+        <label class="title"><i data-lucide="weight" style="width:14px;height:14px;"></i> 카톤 최대 중량 (kg)</label>
+        <div class="slider-row">
+          <input type="range" id="maxCartonWeight" min="1" max="30" step="0.5" value="15" style="flex:1;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="maxCartonWeightInput" min="1" max="30" step="0.5" value="15" style="width:70px;text-align:right;padding:4px 6px;font-family:var(--mono);">
+            <span style="font-size:12px;color:var(--cyan);font-family:var(--mono);">kg</span>
+          </div>
+        </div>
+        <div class="hint" id="cartonWeightHint">—</div>
+      </div>
+
+      <!-- 05 · 팔레트 및 적재제한 -->
+      <div class="panel-title">05 · 팔레트 및 적재 제한 <span class="sub-tag">PALLET</span></div>
+      <div class="field">
+        <label class="title">파레트 종류</label>
+        <select id="palletType">
+          <option value="aju" selected>아주팔레트 (1100×1100×150)</option>
+          <option value="custom">직접입력 (Custom)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="title">파레트 규격 (mm)</label>
+        <div class="dims">
+          <div class="d"><span class="tag">L</span><input type="number" id="palletL" value="1100"></div>
+          <div class="d"><span class="tag">W</span><input type="number" id="palletW" value="1100"></div>
+          <div class="d"><span class="tag">H</span><input type="number" id="palletH" value="150"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="title">최대 적재 한계 높이</label>
+        <div class="slider-row">
+          <input type="range" id="maxHeight" min="300" max="3000" step="10" value="1500" style="flex:1;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="maxHeightInput" min="300" max="3000" value="1500" style="width:70px;text-align:right;padding:4px 6px;font-family:var(--mono);">
+            <span style="font-size:12px;color:var(--cyan);font-family:var(--mono);">mm</span>
+          </div>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="includePalletH" checked>
+          <span>전체 높이에 파레트 높이 포함</span>
+        </label>
+        <div class="hint" id="availHeightHint">—</div>
+      </div>
+      <div class="field">
+        <label class="checkbox-row">
+          <input type="checkbox" id="orientFree" checked>
+          <span>방향 무관 (3축 회전 자동최적화)</span>
+        </label>
+        <div class="hint">체크 해제 시 카톤의 높이(고)가 세로로 고정되어 <b>세운 상태로만</b> 적재하며, 평면상의 좌우 회전(장/폭 교체)만 고려합니다. 제품에 “이쪽이 위” 제약이 있으면 해제하세요.</div>
+      </div>
+    </aside>
+
+    <!-- OUTPUT MAIN CONTENT AREA -->
+    <main>
+      <!-- print-only: the sidebar is hidden on paper, so restate the inputs -->
+      <div class="print-head">
+        <h2>카톤 설계 &amp; 팔레트 적재 작업지시서</h2>
+        <div class="meta" id="printDate"></div>
+      </div>
+      <div id="printSpec" style="display:none;"></div>
+
+      <div class="warn-box" id="warnBox"></div>
+
+      <!-- DASHBOARD -->
+      <section class="dashboard">
+        <div class="dash-card main">
+          <div class="dash-lbl">카톤박스 내경 (Inner Size)</div>
+          <div class="dash-val" id="kpiInnerSize" style="font-size: 17px; margin-bottom: 6px;">—</div>
+          <div style="border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px;">
+            <div class="dash-lbl">카톤박스 외경 (Outer Size)</div>
+            <div class="dash-val-large" id="kpiOuterSize" style="font-size: 22px;">—</div>
+            <div class="dash-sub" id="kpiFluteThickness">A골 (5.0mm 적용)</div>
+          </div>
+        </div>
+        <div class="dash-card accent">
+          <div class="dash-lbl">총 적재 제품 수량</div>
+          <div class="dash-val-large cyan" id="kpiTotalProducts">—</div>
+          <div class="dash-sub" id="kpiInboxRatio">0개입 × 0박스</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-lbl">팔레트 적재 박스 수</div>
+          <div class="dash-val" id="kpiTotalCartons">—</div>
+          <div class="dash-sub" id="kpiPatternLayers">—</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-lbl">카톤 1박스 중량</div>
+          <div class="dash-val" id="kpiCartonWeight">—</div>
+          <div class="dash-sub" id="kpiCartonWeightSub">—</div>
+        </div>
+      </section>
+
+      <!-- CARTON CONTENT VIEW -->
+      <div class="viz-container" id="inboxRow" style="grid-template-columns: 1fr;">
+        <div class="panel viz-card">
+          <div class="viz-head">
+            <h3><i data-lucide="package-open"></i> 카톤 내부 적입도 · 인박스 배열</h3>
+            <span class="pattern-badge" id="inboxBadge">—</span>
+          </div>
+          <svg class="viz" id="inboxSvg" viewBox="0 0 860 440" style="max-width:720px;margin:0 auto;"></svg>
+          <div class="legend" style="justify-content:center;">
+            <div class="li"><span class="sw" style="background:var(--inbox);border:1px solid var(--inbox-line)"></span>인박스 (제품)</div>
+            <div class="li"><span class="sw" style="background:var(--box-a)"></span>카톤 본체</div>
+            <div class="li"><span class="sw" style="background:var(--box-a);opacity:0.3;border:1px solid var(--box-a-line)"></span>앞쪽 벽면 (투시)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISUALIZERS -->
+      <div class="viz-container">
+        <!-- RIGHT: Carton Box Dieline Viewer -->
+        <div class="panel viz-card">
+          <div class="viz-head">
+            <h3><i data-lucide="scissors"></i> 카톤박스 칼선 전개도 (A1형 / RSC)</h3>
+            <span class="pattern-badge" style="background:#E2E8F0;border-color:#CBD5E1;color:var(--ink-dim)">외경 기준 도면</span>
+          </div>
+          <div class="canvas-container">
+            <canvas id="dielineCanvas" width="600" height="340"></canvas>
+          </div>
+          <div class="legend" style="justify-content:center;margin-top:14px;">
+            <div class="li"><span class="sw" style="border:1.5px solid var(--danger);background:transparent;"></span>자르는 선 (Cut)</div>
+            <div class="li"><span class="sw" style="border:1.5px dashed var(--cyan);background:transparent;"></span>접는 선 (Crease)</div>
+            <div class="li"><span class="sw" style="background:rgba(217,119,6,0.1);border:1.5px dashed var(--amber)"></span>풀칠 접착부 (Glue)</div>
+          </div>
+        </div>
+        <!-- LEFT: 3D Pallet Viewer -->
+        <div class="panel viz-card hero">
+          <div class="viz-head">
+            <h3><i data-lucide="box-select"></i> 3D VIEW · 45° 입체 적재도</h3>
+            <span class="pattern-badge" id="patternBadge">—</span>
+          </div>
+          <svg class="viz" id="isoSvg" viewBox="0 0 860 560"></svg>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--box-a)"></span>가로 배치</div>
+            <div class="li"><span class="sw" style="background:var(--box-b)"></span>세로 배치(90° 회전)</div>
+            <div class="li"><span class="sw" style="background:#5A3F1C;border:1px solid #7A5A22"></span>파레트</div>
+          </div>
+          <div class="orient-strip" id="orientStrip"></div>
+        </div>
+
+      </div>
+
+      <!-- SECOND ROW VISUALIZERS -->
+      <div class="viz-container">
+        <!-- TOP VIEW -->
+        <div class="panel viz-card">
+          <div class="viz-head">
+            <h3><i data-lucide="eye"></i> TOP VIEW · 평면 배치도</h3>
+          </div>
+          <svg class="viz" id="topSvg" viewBox="0 0 480 480"></svg>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--box-a)"></span>가로 배치</div>
+            <div class="li"><span class="sw" style="background:var(--box-b)"></span>세로 배치</div>
+            <div class="li"><span class="sw" style="background:transparent;border:1px dashed var(--amber)"></span>파레트 경계</div>
+          </div>
+        </div>
+
+        <!-- SIDE VIEW -->
+        <div class="panel viz-card">
+          <div class="viz-head">
+            <h3><i data-lucide="align-justify"></i> SIDE VIEW · 높이단면 요약</h3>
+          </div>
+          <svg class="viz" id="sideSvg" viewBox="0 0 240 480"></svg>
+        </div>
+      </div>
+
+      <footer class="note">
+        <b>설계 규칙 설명</b><br>
+        1. <b>내경 사이즈 연산</b>: 단품 규격에 배열을 곱한 후 단품 간 여유 간격(공차)을 사방에 추가 적용합니다.<br>
+        2. <b>외경 사이즈 연산</b>: 조립 후의 팽창 여유를 반영하여, 선택하신 골 두께(A골: 5mm, B골: 3mm, AB골: 8mm)에 기반해 외경을 산출합니다.<br>
+        3. <b>작업지시서 & 칼선 다운로드</b>: 상단 PDF 버튼 클릭 시 정밀 스케일링된 A1형 카톤 전개도 칼선과 작업 정보가 담긴 고품질 레포트가 PDF 포맷으로 출력됩니다.
+      </footer>
+    </main>
+
+  </div>
+</div>
+
+<script>
+// ---------- Helpers ----------
+const fmt = n => typeof n === 'number' ? n.toLocaleString('ko-KR') : n;
+
+// ---------- Packing Engine ----------
+function gridForced(L,W,a,b){
+  const nx=Math.floor(L/a), ny=Math.floor(W/b);
+  const rects=[];
+  for(let i=0;i<nx;i++) for(let j=0;j<ny;j++) rects.push({x:i*a,y:j*b,w:a,h:b,rot:false});
+  return {count:nx*ny, rects, pattern:'단일그리드'};
+}
+
+function pinwheel(L, W, a, b) {
+  if (a === b) return { count: -1, rects: [], pattern: '핀휠' };
+  let best = { count: -1, rects: [], pattern: '핀휠' };
+  const maxCols = Math.floor(L / a);
+  const maxRows = Math.floor(W / b);
+  
+  for (let cols = 1; cols <= maxCols; cols++) {
+    for (let rows = 1; rows <= maxRows; rows++) {
+      const A = cols * a;
+      const B = rows * b;
+      if (A + B > L || A + B > W) continue;
+      
+      const countH = cols * rows;
+      const colsV = Math.floor(B / b);
+      const rowsV = Math.floor(A / a);
+      const countV = colsV * rowsV;
+      const total = 2 * countH + 2 * countV;
+      
+      if (total > best.count) {
+        const rects = [];
+        const sL = A + B;
+        const sW = A + B;
+        const ox = Math.floor((L - sL) / 2);
+        const oy = Math.floor((W - sW) / 2);
+        
+        for (let i = 0; i < cols; i++) {
+          for (let j = 0; j < rows; j++) {
+            rects.push({ x: ox + i * a, y: oy + j * b, w: a, h: b, rot: false });
+          }
+        }
+        for (let i = 0; i < colsV; i++) {
+          for (let j = 0; j < rowsV; j++) {
+            rects.push({ x: ox + A + i * b, y: oy + j * a, w: b, h: a, rot: true });
+          }
+        }
+        for (let i = 0; i < cols; i++) {
+          for (let j = 0; j < rows; j++) {
+            rects.push({ x: ox + B + i * a, y: oy + A + j * b, w: a, h: b, rot: false });
+          }
+        }
+        for (let i = 0; i < colsV; i++) {
+          for (let j = 0; j < rowsV; j++) {
+            rects.push({ x: ox + i * b, y: oy + B + j * a, w: b, h: a, rot: true });
+          }
+        }
+        best = { count: total, rects, pattern: '핀휠' };
+      }
+    }
+  }
+  return best;
+}
+
+function hybridPack(L, W, a, b) {
+  let best = { count: -1, rects: [], pattern: '혼합블록' };
+  const maxColsA = Math.floor(L / a);
+  for (let cols = 1; cols < maxColsA; cols++) {
+    const L1 = cols * a;
+    const L2 = L - L1;
+    const rowsLeft = Math.floor(W / b);
+    const leftCount = cols * rowsLeft;
+    const colsRight = Math.floor(L2 / b);
+    const rowsRight = Math.floor(W / a);
+    const rightCount = colsRight * rowsRight;
+    const total = leftCount + rightCount;
+    if (total > best.count) {
+      const rects = [];
+      for (let i = 0; i < cols; i++) for (let j = 0; j < rowsLeft; j++) rects.push({ x: i * a, y: j * b, w: a, h: b, rot: false });
+      for (let i = 0; i < colsRight; i++) for (let j = 0; j < rowsRight; j++) rects.push({ x: L1 + i * b, y: j * a, w: b, h: a, rot: true });
+      best = { count: total, rects, pattern: '혼합블록' };
+    }
+  }
+  const maxColsB = Math.floor(L / b);
+  for (let cols = 1; cols < maxColsB; cols++) {
+    const L1 = cols * b;
+    const L2 = L - L1;
+    const rowsLeft = Math.floor(W / a);
+    const leftCount = cols * rowsLeft;
+    const colsRight = Math.floor(L2 / a);
+    const rowsRight = Math.floor(W / b);
+    const rightCount = colsRight * rowsRight;
+    const total = leftCount + rightCount;
+    if (total > best.count) {
+      const rects = [];
+      for (let i = 0; i < cols; i++) for (let j = 0; j < rowsLeft; j++) rects.push({ x: i * b, y: j * a, w: b, h: a, rot: true });
+      for (let i = 0; i < colsRight; i++) for (let j = 0; j < rowsRight; j++) rects.push({ x: L1 + i * a, y: j * b, w: a, h: b, rot: false });
+      best = { count: total, rects, pattern: '혼합블록' };
+    }
+  }
+  return best;
+}
+
+function bestPack(L, W, a, b) {
+  const candidates = [
+    gridForced(L, W, a, b),
+    gridForced(L, W, b, a),
+    hybridPack(L, W, a, b),
+    pinwheel(L, W, a, b)
+  ];
+  return candidates.reduce((best, c) => {
+    if (c.count > best.count) return c;
+    if (c.count === best.count) {
+      if (c.pattern === '핀휠' && best.pattern === '혼합블록') return c;
+      if (best.pattern === '단일그리드') return best;
+    }
+    return best;
+  });
+}
+
+// ---------- Visual State & UI Handles ----------
+const $ = id => document.getElementById(id);
+let heightMode = 'auto';
+
+const AZ = Math.PI/4, EL = Math.PI/4;
+const cA = Math.cos(AZ), sA = Math.sin(AZ);
+const cE = Math.cos(EL), sE = Math.sin(EL);
+function iso(x,y,z){
+  return { sx: (x - z) * cA, sy: (x + z) * sA * sE - y * cE };
+}
+
+// Flute Margins RSC A1 boxes
+const Flutes = {
+  A:  { name: 'A골', thickness: 5.0, addL: 6, addW: 6, addH: 9 },
+  B:  { name: 'B골', thickness: 3.0, addL: 3, addW: 3, addH: 5 },
+  AB: { name: 'AB골', thickness: 8.0, addL: 9, addW: 9, addH: 14 }
+};
+
+// Event Listeners setup
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    lucide.createIcons();
+  } catch(e) {
+    console.error("Lucide load fail:", e);
+  }
+
+  // Sync slider and input for maxHeight. The number box is the source of truth:
+  // it used to clamp to the slider max (2500) while recalc read the slider, so
+  // typing e.g. 3000 silently computed 2500.
+  $('maxHeight').addEventListener('input', () => {
+    $('maxHeightInput').value = $('maxHeight').value;
+    recalc();
+  });
+  $('maxHeightInput').addEventListener('input', () => {
+    const val = parseInt($('maxHeightInput').value);
+    if (isNaN(val)) return;
+    $('maxHeight').value = Math.max(300, Math.min(val, 3000));
+    recalc();
+  });
+
+  // Carton weight limit slider <-> number
+  $('maxCartonWeight').addEventListener('input', () => {
+    $('maxCartonWeightInput').value = $('maxCartonWeight').value;
+    recalc();
+  });
+  $('maxCartonWeightInput').addEventListener('input', () => {
+    const val = parseFloat($('maxCartonWeightInput').value);
+    if (isNaN(val)) return;
+    $('maxCartonWeight').value = Math.max(1, Math.min(val, 30));
+    recalc();
+  });
+
+  $('autoArrange').addEventListener('change', () => { syncArrangeUI(); recalc(); });
+  $('singleLayer').addEventListener('change', () => { syncArrangeUI(); recalc(); });
+
+  const inputs = ['prodName','inL','inW','inH','inWeight','arrX','arrY','arrZ','gap','fluteType','palletType','palletL','palletW','palletH','includePalletH','orientFree'];
+  inputs.forEach(id => {
+    $(id).addEventListener('input', recalc);
+    $(id).addEventListener('change', recalc);
+  });
+
+  $('palletType').addEventListener('change', e => {
+    const isCustom = e.target.value === 'custom';
+    $('palletL').disabled = !isCustom;
+    $('palletW').disabled = !isCustom;
+    $('palletH').disabled = !isCustom;
+    if (!isCustom) {
+      $('palletL').value = 1100;
+      $('palletW').value = 1100;
+      $('palletH').value = 150;
+    }
+    recalc();
+  });
+
+  // History load (Safe against localStorage block/errors)
+  try {
+    loadHistoryList();
+  } catch(e) {
+    console.error("History list load failed:", e);
+  }
+
+  // Initial run
+  syncArrangeUI();
+  recalc();
+});
+
+// The arrangement boxes are outputs while 최대 적재 is on, and 높이 is pinned to 1
+// while 포장 배열 1단 is on.
+function syncArrangeUI() {
+  const auto = $('autoArrange').checked;
+  const single = $('singleLayer').checked;
+  $('arrX').disabled = auto;
+  $('arrY').disabled = auto;
+  $('arrZ').disabled = auto || single;
+  if (single) $('arrZ').value = 1;
+}
+
+let calculatedOuter = { L: 0, W: 0, H: 0 };
+let calculatedInner = { L: 0, W: 0, H: 0 };
+let activeBestPack = null;
+
+// ---------- Carton sizing + arrangement search ----------
+function cartonFromArrangement(ax, ay, az, inL, inW, inH, gap, flute) {
+  const inner = {
+    L: Math.round(inL * ax + (ax + 1) * gap),
+    W: Math.round(inW * ay + (ay + 1) * gap),
+    H: Math.round(inH * az + (az + 1) * gap)
+  };
+  return {
+    inner,
+    outer: { L: inner.L + flute.addL, W: inner.W + flute.addW, H: inner.H + flute.addH }
+  };
+}
+
+// With 방향 무관 on, try all 3 axes as the stacking height. With it off the
+// carton must stay upright (고 vertical); bestPack still swaps 장/폭 in-plane.
+function packCartonOnPallet(outer, palletL, palletW, availHeight, orientFree) {
+  const combos = orientFree ? [
+    { a: outer.L, b: outer.W, h: outer.H, la:'장', lb:'폭', lh:'고' },
+    { a: outer.L, b: outer.H, h: outer.W, la:'장', lb:'고', lh:'폭' },
+    { a: outer.W, b: outer.H, h: outer.L, la:'폭', lb:'고', lh:'장' }
+  ] : [
+    { a: outer.L, b: outer.W, h: outer.H, la:'장', lb:'폭', lh:'고' }
+  ];
+  let best = null;
+  for (const c of combos) {
+    const pack = bestPack(palletL, palletW, c.a, c.b);
+    if (pack.count <= 0) continue;
+    const layers = Math.max(Math.floor(availHeight / c.h), 0);
+    const total = pack.count * layers;
+    const cand = { ...pack, footprint: c, layers, total };
+    if (!best || total > best.total || (total === best.total && pack.count > best.count)) best = cand;
+  }
+  return best;
+}
+
+// 최대 적재: pick the arrangement that lands the most products on one pallet,
+// staying under the carton weight limit. 포장 배열 1단 pins az to 1.
+const ARR_CAP = 24;
+function findBestArrangement(cfg) {
+  const { inL, inW, inH, gap, flute, palletL, palletW, availHeight,
+          inWeight, maxCartonW, singleLayer, orientFree } = cfg;
+  const palletMax = Math.max(palletL, palletW);
+  const limX = Math.min(ARR_CAP, Math.max(1, Math.floor((palletMax - flute.addL - gap) / (inL + gap))));
+  const limY = Math.min(ARR_CAP, Math.max(1, Math.floor((palletMax - flute.addW - gap) / (inW + gap))));
+  const limZ = singleLayer ? 1
+             : Math.min(ARR_CAP, Math.max(1, Math.floor((availHeight - flute.addH - gap) / (inH + gap))));
+
+  let best = null;
+  for (let ax = 1; ax <= limX; ax++) {
+    for (let ay = 1; ay <= limY; ay++) {
+      for (let az = 1; az <= limZ; az++) {
+        const qty = ax * ay * az;
+        // carton weight ceiling
+        if (inWeight > 0 && maxCartonW > 0 && qty * inWeight > maxCartonW) continue;
+        const c = cartonFromArrangement(ax, ay, az, inL, inW, inH, gap, flute);
+        const pack = packCartonOnPallet(c.outer, palletL, palletW, availHeight, orientFree);
+        if (!pack || pack.total <= 0) continue;
+        const products = pack.total * qty;
+        // most products wins; tie -> fewer cartons to handle
+        if (!best || products > best.products ||
+            (products === best.products && pack.total < best.pack.total)) {
+          best = { ax, ay, az, qty, products, pack, inner: c.inner, outer: c.outer };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function recalc() {
+  const inL = parseFloat($('inL').value)||0;
+  const inW = parseFloat($('inW').value)||0;
+  const inH = parseFloat($('inH').value)||0;
+  const gap = parseFloat($('gap').value)||0;
+  const fluteKey = $('fluteType').value;
+  const flute = Flutes[fluteKey];
+  const inWeight = parseFloat($('inWeight').value)||0;
+  const maxCartonW = parseFloat($('maxCartonWeightInput').value)||0;
+
+  const palletL = parseFloat($('palletL').value)||0;
+  const palletW = parseFloat($('palletW').value)||0;
+  const palletH = parseFloat($('palletH').value)||0;
+  const includePalletH = $('includePalletH').checked;
+
+  const warnBox = $('warnBox');
+  warnBox.classList.remove('show');
+
+  if(inL <=0 || inW <= 0 || inH <= 0 || palletL <= 0 || palletW <= 0){
+    warnBox.textContent = '인박스 크기 또는 팔레트 규격을 확인해주세요.';
+    warnBox.classList.add('show');
+    return;
+  }
+
+  // Stack height budget (needed before the arrangement search)
+  const maxH = parseFloat($('maxHeightInput').value)||0;
+  const availHeight = includePalletH ? (maxH - palletH) : maxH;
+  $('availHeightHint').textContent = `적재 한계 높이: ${fmt(Math.max(availHeight,0))} mm (파레트 높이 ${fmt(palletH)}mm ${includePalletH ? '제외 계산됨' : '별도'})`;
+
+  const autoArrange = $('autoArrange').checked;
+  const singleLayer = $('singleLayer').checked;
+  const orientFree = $('orientFree').checked;
+
+  let arrX, arrY, arrZ, best;
+
+  if (autoArrange) {
+    const found = findBestArrangement({ inL, inW, inH, gap, flute, palletL, palletW,
+                                        availHeight, inWeight, maxCartonW, singleLayer,
+                                        orientFree });
+    if (!found) {
+      warnBox.textContent = inWeight > 0 && maxCartonW > 0
+        ? `조건을 만족하는 배열이 없습니다. 카톤 최대 중량(${maxCartonW}kg) 또는 적재 높이를 확인해주세요.`
+        : '조건을 만족하는 배열이 없습니다. 인박스 크기 또는 팔레트 규격을 확인해주세요.';
+      warnBox.classList.add('show');
+      ['kpiTotalProducts','kpiTotalCartons','kpiPatternLayers','kpiCartonWeight'].forEach(id=>$(id).innerHTML = '—');
+      $('topSvg').innerHTML=''; $('sideSvg').innerHTML=''; $('isoSvg').innerHTML='';
+      $('orientStrip').innerHTML=''; $('inboxSvg').innerHTML=''; $('inboxBadge').textContent='—';
+      return;
+    }
+    arrX = found.ax; arrY = found.ay; arrZ = found.az;
+    best = found.pack;
+    calculatedInner = found.inner;
+    calculatedOuter = found.outer;
+    // reflect the chosen arrangement back into the (disabled) inputs
+    $('arrX').value = arrX; $('arrY').value = arrY; $('arrZ').value = arrZ;
+  } else {
+    arrX = parseInt($('arrX').value)||1;
+    arrY = parseInt($('arrY').value)||1;
+    arrZ = singleLayer ? 1 : (parseInt($('arrZ').value)||1);
+    if (singleLayer) $('arrZ').value = 1;
+    const c = cartonFromArrangement(arrX, arrY, arrZ, inL, inW, inH, gap, flute);
+    calculatedInner = c.inner;
+    calculatedOuter = c.outer;
+    best = packCartonOnPallet(calculatedOuter, palletL, palletW, availHeight, orientFree);
+  }
+
+  const inQty = arrX * arrY * arrZ;
+  const cartonWeight = inQty * inWeight;
+  $('arrHint').textContent = `총 ${inQty}개입 구성 (${arrX} × ${arrY} × ${arrZ})`
+    + (autoArrange ? ' · 자동 최적화됨' : '');
+
+  // Render size results
+  $('kpiInnerSize').textContent = `${calculatedInner.L} × ${calculatedInner.W} × ${calculatedInner.H}`;
+  $('kpiOuterSize').textContent = `${calculatedOuter.L} × ${calculatedOuter.W} × ${calculatedOuter.H}`;
+  $('kpiFluteThickness').textContent = `${flute.name} (골두께 ${flute.thickness.toFixed(1)}mm 적용)`;
+
+  // Carton weight vs limit
+  const overWeight = inWeight > 0 && maxCartonW > 0 && cartonWeight > maxCartonW + 1e-9;
+  if (inWeight > 0) {
+    $('kpiCartonWeight').innerHTML = fmt(Math.round(cartonWeight*100)/100) +
+      `<span style="font-size:12px;color:${overWeight ? 'var(--danger)' : 'var(--ink-faint)'};font-weight:400;margin-left:4px;">kg</span>`;
+    $('kpiCartonWeightSub').textContent = `${inQty}개입 × ${inWeight}kg` +
+      (maxCartonW > 0 ? ` · 한도 ${maxCartonW}kg 대비 ${(cartonWeight/maxCartonW*100).toFixed(0)}%` : '');
+    $('cartonWeightHint').textContent = `현재 카톤 중량 ${Math.round(cartonWeight*100)/100}kg / 한도 ${maxCartonW}kg`
+      + (overWeight ? ' — 한도 초과!' : '');
+  } else {
+    $('kpiCartonWeight').innerHTML = '—';
+    $('kpiCartonWeightSub').textContent = '단품 중량 미입력';
+    $('cartonWeightHint').textContent = `인박스 단품 중량을 입력하면 카톤 중량이 계산됩니다.`;
+  }
+  if (overWeight && !autoArrange) {
+    warnBox.textContent = `카톤 중량 ${Math.round(cartonWeight*100)/100}kg 이 최대 중량 ${maxCartonW}kg 을 초과합니다. 배열 또는 한도를 조정해주세요.`;
+    warnBox.classList.add('show');
+  }
+
+  activeBestPack = best;
+
+  if(!best || best.total<=0){
+    warnBox.textContent = '카톤박스 외경이 팔레트 규격 또는 높이 제한을 초과하여 적재할 수 없습니다.';
+    warnBox.classList.add('show');
+    ['kpiTotalProducts','kpiTotalCartons','kpiPatternLayers'].forEach(id=>$(id).innerHTML = '—');
+    $('topSvg').innerHTML=''; $('sideSvg').innerHTML=''; $('isoSvg').innerHTML=''; $('orientStrip').innerHTML='';
+    // the carton itself is still valid even if it won't fit the pallet
+    drawDieline(calculatedOuter.L, calculatedOuter.W, calculatedOuter.H);
+    drawInboxLayout(calculatedInner, calculatedOuter, flute, inL, inW, inH, gap, arrX, arrY, arrZ);
+    return;
+  }
+
+  const totalProducts = best.total * inQty;
+  const boxArea = best.rects.reduce((sum, r) => sum + r.w * r.h, 0);
+  const occupancy = Math.min(boxArea / (palletL * palletW) * 100, 100);
+  const palletLoadWeight = best.total * cartonWeight;
+
+  $('kpiTotalProducts').innerHTML = fmt(totalProducts) + '<span style="font-size:12px;color:var(--ink-faint);font-weight:400;margin-left:4px;">EA</span>';
+  $('kpiInboxRatio').textContent = `Box당 ${inQty}개입 × ${best.total} Box`;
+  $('kpiTotalCartons').innerHTML = fmt(best.total) + '<span style="font-size:12px;color:var(--ink-faint);font-weight:400;margin-left:4px;">Box</span>';
+  $('kpiPatternLayers').textContent = `${best.count} Box/단 × ${best.layers}단 (${occupancy.toFixed(1)}% 점유)`
+    + (inWeight > 0 ? ` · 팔레트 ${fmt(Math.round(palletLoadWeight))}kg` : '');
+  $('patternBadge').textContent = best.pattern.toUpperCase();
+
+  $('orientStrip').innerHTML =
+    `<span class="oi">${best.footprint.la}(L) <b>${fmt(best.footprint.a)}mm</b> → 가로</span>` +
+    `<span class="oi">${best.footprint.lb}(W) <b>${fmt(best.footprint.b)}mm</b> → 세로</span>` +
+    `<span class="oi">${best.footprint.lh}(H) <b>${fmt(best.footprint.h)}mm</b> → 높이</span>` +
+    `<span class="oi">1단 <b>${fmt(best.count)}EA</b> × ${best.layers}단 = <b>${fmt(best.total)}EA</b></span>`;
+
+  drawTop(palletL, palletW, best);
+  draw3D(palletL, palletW, palletH, best);
+  drawSide(palletH, best, 'auto', maxH, includePalletH);
+  drawDieline(calculatedOuter.L, calculatedOuter.W, calculatedOuter.H);
+  drawInboxLayout(calculatedInner, calculatedOuter, flute, inL, inW, inH, gap, arrX, arrY, arrZ);
+}
+
+window.recalc = recalc;
+
+// ---------- 3D Isometric View Drawer ----------
+function draw3D(L, W, palletH, best){
+  const svg = $('isoSvg');
+  const viewW = 860, viewH = 560, pad = 70;
+  const boxH = best.footprint.h;
+  const totalH = palletH + boxH*best.layers;
+
+  const dimMargin = Math.max(L,W) * 0.09 * 1.9;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const xx of [0,L+dimMargin]) for(const yy of [0,totalH]) for(const zz of [0,W+dimMargin]){
+    const p = iso(xx,yy,zz);
+    minX=Math.min(minX,p.sx); maxX=Math.max(maxX,p.sx);
+    minY=Math.min(minY,p.sy); maxY=Math.max(maxY,p.sy);
+  }
+  const scale = Math.min((viewW-pad*2)/(maxX-minX), (viewH-pad*2)/(maxY-minY));
+  const originX = pad - minX*scale + ((viewW-pad*2)-(maxX-minX)*scale)/2;
+  const originY = pad - minY*scale + ((viewH-pad*2)-(maxY-minY)*scale)/2;
+
+  function P(x,y,z){
+    const p = iso(x,y,z);
+    return { x: originX + p.sx*scale, y: originY + p.sy*scale };
+  }
+  function poly(pts){ return pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '); }
+
+  function cuboid(x0,y0,z0,w,h,d, topFill,rightFill,frontFill, strokeCol){
+    const v = {
+      '010':P(x0,y0+h,z0), '110':P(x0+w,y0+h,z0), '111':P(x0+w,y0+h,z0+d), '011':P(x0,y0+h,z0+d),
+      '100':P(x0+w,y0,z0), '101':P(x0+w,y0,z0+d), '001':P(x0,y0,z0+d)
+    };
+    const top   = `<polygon points="${poly([v['010'],v['110'],v['111'],v['011']])}" fill="${topFill}" stroke="${strokeCol}" stroke-width="0.6"/>`;
+    const right = `<polygon points="${poly([v['100'],v['110'],v['111'],v['101']])}" fill="${rightFill}" stroke="${strokeCol}" stroke-width="0.6"/>`;
+    const front = `<polygon points="${poly([v['001'],v['101'],v['111'],v['011']])}" fill="${frontFill}" stroke="${strokeCol}" stroke-width="0.6"/>`;
+    const depth = (x0+w/2)+(z0+d/2)+y0*1.6;
+    return { depth, svg: top+right+front };
+  }
+
+  const items = [];
+  const pal = cuboid(0,0,0, L, palletH, W, '#5A3F1C', '#3E2B13', '#2E200D', '#7A5A22');
+  pal.depth = -999999;
+  items.push(pal);
+
+  for(let li=0; li<best.layers; li++){
+    const y0 = palletH + li*boxH;
+    for(const r of best.rects){
+      const rot = r.rot;
+      // kraft brown: base / -15% / -30% shading, +15% edge
+      const top = rot ? '#B88650' : '#D2A06A';
+      const right = rot ? '#92602A' : '#AC7A44';
+      const front = rot ? '#6B3903' : '#85531D';
+      const stroke = rot ? '#DEAC76' : '#F8C690';
+      items.push(cuboid(r.x, y0, r.y, r.w, boxH, r.h, top, right, front, stroke));
+    }
+  }
+
+  items.sort((a,b)=>a.depth-b.depth);
+  let s = items.map(it=>it.svg).join('');
+
+  const gc = P(L/2, 0, W/2);
+  s = `<ellipse cx="${gc.x}" cy="${gc.y+4}" rx="${(L*scale*0.55)}" ry="${(L*scale*0.18)}" fill="#000" opacity="0.28"/>` + s;
+
+  if(best.rects.length){
+    const topLayerIndex = best.layers - 1;
+    const topY0 = palletH + topLayerIndex*boxH;
+    const r0 = best.rects.reduce((f,r)=> (r.x+r.w)+(r.y+r.h) > (f.x+f.w)+(f.y+f.h) ? r : f, best.rects[0]);
+
+    const labelX = r0.rot ? best.footprint.lb : best.footprint.la;
+    const valX   = r0.rot ? best.footprint.b  : best.footprint.a;
+    const labelZ = r0.rot ? best.footprint.la : best.footprint.lb;
+    const valZ   = r0.rot ? best.footprint.a  : best.footprint.b;
+
+    const frontX = r0.x + r0.w, frontZ = r0.y + r0.h, topOfBox = topY0 + boxH;
+    const corner   = P(frontX, topOfBox, frontZ);
+    const edgeXend = P(r0.x,   topOfBox, frontZ);
+    const edgeZend = P(frontX, topOfBox, r0.y);
+    const edgeHend = P(frontX, topY0,    frontZ);
+
+    s += drawDimLabels(corner, [
+      { c2: edgeXend, color: '#D97706', text: `${labelX} ${fmt(Math.round(valX))}mm` },
+      { c2: edgeZend, color: '#0284C7', text: `${labelZ} ${fmt(Math.round(valZ))}mm` },
+      { c2: edgeHend, color: '#10B981', text: `${best.footprint.lh} ${fmt(Math.round(boxH))}mm` }
+    ], P(r0.x + r0.w/2, topY0 + boxH/2, r0.y + r0.h/2), viewW, viewH);
+  }
+
+  svg.innerHTML = s;
+}
+
+// All three dimension arrows leave the same corner, so on small cartons the
+// chips land on top of each other. Park each one out along its own arrow, then
+// push any overlapping pair apart before drawing.
+function drawDimLabels(corner, specs, boxCenter, viewW, viewH){
+  const LBL_H = 17;
+  const chipWidth = (t) => {
+    const units = [...t].reduce((n, ch) => n + (/[ㄱ-힝]/.test(ch) ? 2 : 1), 0);
+    return Math.max(48, units * 6.1 + 12);
+  };
+
+  for(const d of specs){
+    d.w = chipWidth(d.text);
+    const dx = d.c2.x - corner.x, dy = d.c2.y - corner.y;
+    const len = Math.hypot(dx, dy) || 1;
+    d.ux = dx/len; d.uy = dy/len;
+    let px = -d.uy, py = d.ux;
+    const midX = corner.x + d.ux*len/2, midY = corner.y + d.uy*len/2;
+    const dIn  = Math.hypot(midX + px - boxCenter.x, midY + py - boxCenter.y);
+    const dOut = Math.hypot(midX - px - boxCenter.x, midY - py - boxCenter.y);
+    if(dIn < dOut){ px = -px; py = -py; }
+    const t = Math.max(len*0.55, 46);
+    d.lx = corner.x + d.ux*Math.min(t, len);
+    d.ly = corner.y + d.uy*Math.min(t, len);
+    d.ox = corner.x + d.ux*t + px*13;
+    d.oy = corner.y + d.uy*t + py*13;
+  }
+
+  for(let iter=0; iter<80; iter++){
+    let moved = false;
+    for(let i=0;i<specs.length;i++) for(let j=i+1;j<specs.length;j++){
+      const A = specs[i], B = specs[j];
+      let dx = B.ox - A.ox, dy = B.oy - A.oy;
+      const penX = (A.w/2 + B.w/2 + 6) - Math.abs(dx);
+      const penY = (LBL_H + 6) - Math.abs(dy);
+      if(penX <= 0 || penY <= 0) continue;
+      moved = true;
+      if(penY <= penX){
+        if(dy === 0) dy = 1;
+        const push = Math.sign(dy) * penY/2;
+        A.oy -= push; B.oy += push;
+      } else {
+        if(dx === 0) dx = 1;
+        const push = Math.sign(dx) * penX/2;
+        A.ox -= push; B.ox += push;
+      }
+    }
+    if(!moved) break;
+  }
+
+  let out = '';
+  for(const d of specs){
+    d.ox = Math.max(d.w/2 + 2, Math.min(viewW - d.w/2 - 2, d.ox));
+    d.oy = Math.max(LBL_H/2 + 2, Math.min(viewH - LBL_H/2 - 2, d.oy));
+    const head1 = { x: d.c2.x - d.ux*7 - d.uy*3.5, y: d.c2.y - d.uy*7 + d.ux*3.5 };
+    const head2 = { x: d.c2.x - d.ux*7 + d.uy*3.5, y: d.c2.y - d.uy*7 - d.ux*3.5 };
+    out += `<line x1="${corner.x}" y1="${corner.y}" x2="${d.c2.x}" y2="${d.c2.y}" stroke="${d.color}" stroke-width="3" stroke-linecap="round"/>`+
+           `<polygon points="${d.c2.x},${d.c2.y} ${head1.x},${head1.y} ${head2.x},${head2.y}" fill="${d.color}"/>`+
+           `<line x1="${d.lx}" y1="${d.ly}" x2="${d.ox}" y2="${d.oy}" stroke="${d.color}" stroke-width="1" stroke-dasharray="2,2" opacity="0.9"/>`+
+           `<rect x="${d.ox-d.w/2}" y="${d.oy-LBL_H/2}" width="${d.w}" height="${LBL_H}" fill="#FFFFFF" stroke="${d.color}" stroke-width="0.75" rx="2"/>`+
+           `<text x="${d.ox}" y="${d.oy+3.5}" fill="${d.color}" font-family="IBM Plex Mono, monospace" font-size="10.5" text-anchor="middle" font-weight="600">${d.text}</text>`;
+  }
+  return out;
+}
+
+// ---------- 2D Top View Drawer ----------
+function drawTop(L, W, best){
+  const svg = $('topSvg');
+  const pad = 46;
+  const size = 480;
+  const scale = (size - pad*2) / Math.max(L,W);
+  const offX = pad + (Math.max(L,W)-L)*scale/2;
+  const offY = pad + (Math.max(L,W)-W)*scale/2;
+
+  let s = '';
+  s += `<rect x="${offX}" y="${offY}" width="${L*scale}" height="${W*scale}" fill="none" stroke="#F2A93B" stroke-width="1.5" stroke-dasharray="6 4"/>`;
+
+  for(const r of best.rects){
+    const fill = r.rot ? 'var(--box-b)' : 'var(--box-a)';
+    const stroke = r.rot ? 'var(--box-b-line)' : 'var(--box-a-line)';
+    s += `<rect x="${offX+r.x*scale}" y="${offY+r.y*scale}" width="${r.w*scale}" height="${r.h*scale}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="1"/>`;
+  }
+
+  s += dimLine(offX, offY-14, offX+L*scale, offY-14, L+' mm', 'h');
+  s += dimLine(offX-14, offY, offX-14, offY+W*scale, W+' mm', 'v');
+  svg.innerHTML = s;
+}
+
+function dimLine(x1,y1,x2,y2,label,dir){
+  const mid = dir==='h' ? {x:(x1+x2)/2, y:y1-6} : {x:x1-24, y:(y1+y2)/2};
+  let s = `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#56637A" stroke-width="1"/>`;
+  s += `<line x1="${x1}" y1="${y1-4}" x2="${x1}" y2="${y1+4}" stroke="#56637A" stroke-width="1"/>`;
+  s += `<line x1="${x2}" y1="${y2-4}" x2="${x2}" y2="${y2+4}" stroke="#56637A" stroke-width="1"/>`;
+  s += `<text x="${mid.x}" y="${mid.y}" fill="#8A97AC" font-family="IBM Plex Mono, monospace" font-size="10.5" text-anchor="middle" transform="${dir==='v' ? `rotate(-90 ${mid.x} ${mid.y})` : ''}">${label}</text>`;
+  return s;
+}
+
+// ---------- 2D Side View Height Drawer ----------
+function drawSide(palletH, best, mode, maxH, includePalletH){
+  const svg = $('sideSvg');
+  const viewW = 240, viewH = 480;
+  const padBottom = 30, padTop = 24, padSide = 60;
+  const boxH = best.footprint.h;
+  const totalLoadH = boxH * best.layers;
+  const totalH = includePalletH || mode==='manual' ? totalLoadH + palletH : totalLoadH + palletH;
+
+  const refHeight = mode==='auto' ? Math.max(maxH, totalH) : totalH;
+  const scale = (viewH - padBottom - padTop) / refHeight;
+
+  const baseY = viewH - padBottom;
+  let s = '';
+  s += `<line x1="${padSide-20}" y1="${baseY}" x2="${viewW-10}" y2="${baseY}" stroke="#223047" stroke-width="1"/>`;
+  const plH = palletH*scale;
+  s += `<rect x="${padSide}" y="${baseY-plH}" width="90" height="${plH}" fill="#4A3418" stroke="#7A5A22" stroke-width="1"/>`;
+  s += `<text x="${padSide+45}" y="${baseY-plH/2+4}" fill="#F2A93B" font-family="IBM Plex Mono" font-size="9.5" text-anchor="middle">PALLET</text>`;
+
+  let y = baseY - plH;
+  const lH = boxH*scale;
+  for(let i=0;i<best.layers;i++){
+    y -= lH;
+    const fill = i%2===0 ? 'var(--box-a)' : 'var(--box-b)';
+    const stroke = i%2===0 ? 'var(--box-a-line)' : 'var(--box-b-line)';
+    s += `<rect x="${padSide}" y="${y}" width="90" height="${Math.max(lH-1.5,1)}" fill="${fill}" stroke="${stroke}" stroke-width="0.75"/>`;
+  }
+
+  if(mode==='auto'){
+    const limitLoadTop = includePalletH ? maxH : maxH+palletH;
+    const limY = baseY - limitLoadTop*scale;
+    s += `<line x1="${padSide-14}" y1="${limY}" x2="${viewW-10}" y2="${limY}" stroke="#E0625A" stroke-width="1.25" stroke-dasharray="5 3"/>`;
+    s += `<text x="${viewW-12}" y="${limY-5}" fill="#E0625A" font-family="IBM Plex Mono" font-size="9.5" text-anchor="end">LIMIT ${fmt(maxH)}mm</text>`;
+  }
+
+  s += `<text x="${padSide+45}" y="${baseY+16}" fill="#8A97AC" font-family="IBM Plex Mono" font-size="10" text-anchor="middle">총 ${fmt(Math.round(totalH))}mm</text>`;
+  svg.innerHTML = s;
+}
+
+// ---------- Carton Content View (open RSC with inboxes loaded) ----------
+const INBOX_DRAW_CAP = 1200; // don't try to draw absurd arrangements
+
+function drawInboxLayout(inner, outer, flute, inL, inW, inH, gap, arrX, arrY, arrZ) {
+  const svg = $('inboxSvg');
+  const viewW = 860, viewH = 440, pad = 30;
+
+  const L = outer.L, W = outer.W, H = outer.H;
+  // board thickness per side, from the flute allowance actually applied
+  const wx = Math.max(1, (outer.L - inner.L) / 2);
+  const wz = Math.max(1, (outer.W - inner.W) / 2);
+  const wy = Math.max(1, (outer.H - inner.H) / 2);
+  const fd = W / 2;                       // RSC flap depth
+  const t  = Math.max(1.5, flute.thickness);
+
+  // bounds include the flaps folded flat outward
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const xx of [-fd, L + fd]) for (const yy of [0, H]) for (const zz of [-fd, W + fd]) {
+    const p = iso(xx, yy, zz);
+    minX = Math.min(minX, p.sx); maxX = Math.max(maxX, p.sx);
+    minY = Math.min(minY, p.sy); maxY = Math.max(maxY, p.sy);
+  }
+  const scale = Math.min((viewW - pad*2) / (maxX - minX), (viewH - pad*2) / (maxY - minY));
+  const originX = pad - minX*scale + ((viewW - pad*2) - (maxX - minX)*scale) / 2;
+  const originY = pad - minY*scale + ((viewH - pad*2) - (maxY - minY)*scale) / 2;
+
+  function P(x, y, z) {
+    const p = iso(x, y, z);
+    return { x: originX + p.sx*scale, y: originY + p.sy*scale };
+  }
+  function poly(pts) { return pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '); }
+
+  function box(x0, y0, z0, w, h, d, topF, rightF, frontF, stroke, opacity) {
+    const v = {
+      '010': P(x0, y0+h, z0), '110': P(x0+w, y0+h, z0), '111': P(x0+w, y0+h, z0+d), '011': P(x0, y0+h, z0+d),
+      '100': P(x0+w, y0, z0), '101': P(x0+w, y0, z0+d), '001': P(x0, y0, z0+d)
+    };
+    const op = opacity === undefined ? 1 : opacity;
+    return {
+      depth: (x0 + w/2) + (z0 + d/2) + y0*1.6,
+      svg: `<polygon points="${poly([v['010'],v['110'],v['111'],v['011']])}" fill="${topF}" stroke="${stroke}" stroke-width="0.7" fill-opacity="${op}"/>`
+         + `<polygon points="${poly([v['100'],v['110'],v['111'],v['101']])}" fill="${rightF}" stroke="${stroke}" stroke-width="0.7" fill-opacity="${op}"/>`
+         + `<polygon points="${poly([v['001'],v['101'],v['111'],v['011']])}" fill="${frontF}" stroke="${stroke}" stroke-width="0.7" fill-opacity="${op}"/>`
+    };
+  }
+
+  const CT='#D2A06A', CR='#AC7A44', CF='#85531D', CS='#F8C690';  // carton kraft
+  const IT='#E8C49B', IR='#C9975A', IF='#A9762F', IS='#8A5A22';  // inbox
+
+  // Explicit draw order — a depth sort can't resolve the translucent near walls,
+  // so they and the near flaps are painted last on purpose.
+  let s = '';
+  s += box(0, H, -fd, L, t, fd, CR, CF, CF, CS).svg;   // far flap (z-)
+  s += box(-fd, H, 0, fd, t, W, CR, CF, CF, CS).svg;   // far flap (x-)
+  s += box(0, 0, 0, L, wy, W, CR, CF, CF, CS).svg;     // bottom
+  s += box(0, 0, 0, wx, H, W, CT, CR, CF, CS).svg;     // far wall x=0
+  s += box(0, 0, 0, L, H, wz, CT, CR, CF, CS).svg;     // far wall z=0
+
+  const qty = arrX * arrY * arrZ;
+  if (qty <= INBOX_DRAW_CAP) {
+    const inboxes = [];
+    for (let k = 0; k < arrZ; k++) for (let j = 0; j < arrY; j++) for (let i = 0; i < arrX; i++) {
+      inboxes.push(box(wx + gap + i*(inL+gap), wy + gap + k*(inH+gap), wz + gap + j*(inW+gap),
+                       inL, inH, inW, IT, IR, IF, IS));
+    }
+    inboxes.sort((a, b) => a.depth - b.depth);
+    s += inboxes.map(b => b.svg).join('');
+  } else {
+    const c = P(L/2, H/2, W/2);
+    s += `<text x="${c.x}" y="${c.y}" fill="#64748B" font-family="IBM Plex Mono, monospace" font-size="14" text-anchor="middle">인박스 ${fmt(qty)}개 — 표시 생략</text>`;
+  }
+
+  s += box(L - wx, 0, 0, wx, H, W, CT, CR, CF, CS, 0.28).svg;  // near wall x=L (see-through)
+  s += box(0, 0, W - wz, L, H, wz, CT, CR, CF, CS, 0.28).svg;  // near wall z=W (see-through)
+  s += box(L, H, 0, fd, t, W, CR, CF, CF, CS).svg;             // near flap (x+)
+  s += box(0, H, W, L, t, fd, CR, CF, CF, CS).svg;             // near flap (z+)
+
+  svg.innerHTML = s;
+  $('inboxBadge').textContent = `${arrX} × ${arrY} × ${arrZ} = ${fmt(qty)} EA`;
+}
+
+// ---------- Carton Dieline Canvas Renderer (A1 RSC) ----------
+function drawDieline(L, W, H) {
+  const canvas = $('dielineCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0, canvas.width, canvas.height);
+
+  const g = 30; // glue flap
+  const totalW = g + L + W + L + W;
+  const totalH = H + W;
+  
+  const pad = 45;
+  // reserve a gutter on the right so the H: dimension text isn't clipped
+  const labelGutter = 48;
+  const scale = Math.min((canvas.width - pad*2 - labelGutter)/totalW, (canvas.height - pad*2)/totalH);
+
+  const startX = pad + (canvas.width - pad*2 - labelGutter - totalW*scale)/2;
+  const startY = pad + (canvas.height - pad*2 - totalH*scale)/2;
+
+  const sG = g * scale;
+  const sL = L * scale;
+  const sW = W * scale;
+  const sH = H * scale;
+  const sF = (W / 2) * scale;
+
+  ctx.lineWidth = 1;
+
+  function line(x1, y1, x2, y2, isDashed = false) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    if(isDashed) {
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#0284C7';
+    } else {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#EF4444';
+    }
+    ctx.stroke();
+  }
+
+  const yFlapTop = startY;
+  const yH1 = startY + sF;
+  const yH2 = startY + sF + sH;
+  const yFlapBot = startY + sF + sH + sF;
+
+  const xG = startX;
+  const xL1 = startX + sG;
+  const xW1 = xL1 + sL;
+  const xL2 = xW1 + sW;
+  const xW2 = xL2 + sL;
+  const xEnd = xW2 + sW;
+
+  line(xL1, yH1, xEnd, yH1, true);
+  line(xL1, yH2, xEnd, yH2, true);
+
+  line(xL1, yH1, xL1, yH2, true);
+  line(xW1, yH1, xW1, yH2, true);
+  line(xL2, yH1, xL2, yH2, true);
+  line(xW2, yH1, xW2, yH2, true);
+
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(xG, yH1 + 5*scale);
+  ctx.lineTo(xL1, yH1);
+  ctx.lineTo(xL1, yH2);
+  ctx.lineTo(xG, yH2 - 5*scale);
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.moveTo(xG, yH1 + 5*scale);
+  ctx.lineTo(xL1, yH1);
+  ctx.moveTo(xL1, yH2);
+  ctx.lineTo(xG, yH2 - 5*scale);
+  ctx.lineTo(xG, yH1 + 5*scale);
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#EF4444';
+  ctx.stroke();
+
+  line(xL1, yFlapTop, xEnd, yFlapTop, false);
+  line(xL1, yFlapBot, xEnd, yFlapBot, false);
+
+  line(xL1, yH1, xL1, yFlapTop, false);
+  line(xW1, yH1, xW1, yFlapTop, false);
+  line(xL2, yH1, xL2, yFlapTop, false);
+  line(xW2, yH1, xW2, yFlapTop, false);
+  line(xEnd, yH1, xEnd, yFlapTop, false);
+
+  line(xL1, yH2, xL1, yFlapBot, false);
+  line(xW1, yH2, xW1, yFlapBot, false);
+  line(xL2, yH2, xL2, yFlapBot, false);
+  line(xW2, yH2, xW2, yFlapBot, false);
+  line(xEnd, yH2, xEnd, yFlapBot, false);
+
+  // Right edge of the body panel — the free edge that meets the glue tab when
+  // folded. Without it the blank is left open down its whole right side.
+  line(xEnd, yH1, xEnd, yH2, false);
+
+  ctx.fillStyle = '#64748B';
+  ctx.font = '10px IBM Plex Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.setLineDash([]);
+  
+  ctx.fillText(`L: ${L}`, xL1 + sL/2, yH1 + sH/2 + 3);
+  ctx.fillText(`W: ${W}`, xW1 + sW/2, yH1 + sH/2 + 3);
+  ctx.fillText(`H: ${H}`, xEnd + 18, yH1 + sH/2 + 3);
+  ctx.fillText(`W/2: ${Math.round(W/2)}`, xL1 + sL/2, yH1 - 10);
+  
+  ctx.strokeStyle = '#64748B';
+  ctx.beginPath();
+  ctx.moveTo(xEnd + 8, yH1);
+  ctx.lineTo(xEnd + 8, yH2);
+  ctx.stroke();
+}
+
+// ---------- PDF Download Handlers ----------
+// The job sheet is the live result area printed to A4 via the print stylesheet,
+// so it stays vector/selectable instead of a rasterised canvas.
+function exportJobSheet() {
+  const pad = n => String(n).padStart(2, '0');
+  const d = new Date();
+  $('printDate').textContent =
+    `출력일시 ${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const prodName = $('prodName').value.trim();
+  const inQty = (parseInt($('arrX').value)||1) * (parseInt($('arrY').value)||1) * (parseInt($('arrZ').value)||1);
+  const inWeight = parseFloat($('inWeight').value) || 0;
+  const flute = Flutes[$('fluteType').value];
+
+  const rows = [
+    (prodName ? `제품명: ${prodName}   |   ` : '') +
+    `인박스: ${$('inL').value}×${$('inW').value}×${$('inH').value}mm` +
+    (inWeight > 0 ? ` / ${inWeight}kg` : '') +
+    `   |   배열: ${$('arrX').value}×${$('arrY').value}×${$('arrZ').value} (${inQty}개입)` +
+    `   |   유격: ${$('gap').value}mm   |   ${flute.name} (${flute.thickness.toFixed(1)}mm)`,
+
+    `카톤 내경: ${calculatedInner.L}×${calculatedInner.W}×${calculatedInner.H}mm` +
+    `   |   외경: ${calculatedOuter.L}×${calculatedOuter.W}×${calculatedOuter.H}mm` +
+    `   |   팔레트: ${$('palletL').value}×${$('palletW').value}×${$('palletH').value}mm` +
+    `   |   최대높이: ${$('maxHeightInput').value}mm (팔레트 ${$('includePalletH').checked ? '포함' : '별도'})`,
+
+    `최대적재: ${$('autoArrange').checked ? 'ON' : 'OFF'}` +
+    `   |   포장배열 1단: ${$('singleLayer').checked ? 'ON' : 'OFF'}` +
+    `   |   방향무관: ${$('orientFree').checked ? 'ON' : 'OFF'}` +
+    `   |   카톤 최대중량: ${$('maxCartonWeightInput').value}kg`
+  ];
+  $('printSpec').innerHTML = rows.join('<br>');
+
+  window.print();
+}
+
+function exportDielinePDF() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2970;
+  canvas.height = 2100;
+  const ctx = canvas.getContext('2d');
+  
+  // Background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  const L = calculatedOuter.L;
+  const W = calculatedOuter.W;
+  const H = calculatedOuter.H;
+  const prodName = $('prodName').value || '기본 제품';
+  const fluteName = Flutes[$('fluteType').value].name;
+
+  // Title
+  ctx.fillStyle = '#0F172A';
+  ctx.font = 'bold 48px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+  ctx.fillText('카톤박스 도면 칼선 (Dieline) - RSC A1형', 150, 120);
+  
+  ctx.fillStyle = '#64748B';
+  ctx.font = '32px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+  ctx.fillText(`제품명: ${prodName} | 골종류: ${fluteName} | 외경: ${L}×${W}×${H} mm`, 150, 180);
+  
+  ctx.strokeStyle = '#E2E8F0';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(150, 210);
+  ctx.lineTo(2820, 210);
+  ctx.stroke();
+
+  // Draw dieline layout on canvas...
+  const g = 30;
+  const totalW = g + L + W + L + W;
+  const totalH = H + W;
+  
+  const marginX = 200;
+  const marginY = 300;
+  // reserve a gutter on the right so the 고(H) dimension text isn't clipped
+  const labelGutter = 300;
+  const availW = 2970 - marginX*2 - labelGutter;
+  const availH = 2100 - marginY*2;
+  const scale = Math.min(availW / totalW, availH / totalH);
+
+  const startX = marginX + (availW - totalW*scale)/2;
+  const startY = marginY + (availH - totalH*scale)/2;
+
+  const sG = g * scale;
+  const sL = L * scale;
+  const sW = W * scale;
+  const sH = H * scale;
+  const sF = (W / 2) * scale;
+
+  function drawLine(x1, y1, x2, y2, isCrease = false) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    if(isCrease) {
+      ctx.strokeStyle = '#0284C7';
+      ctx.setLineDash([12, 12]);
+      ctx.lineWidth = 3;
+    } else {
+      ctx.strokeStyle = '#EF4444';
+      ctx.setLineDash([]);
+      ctx.lineWidth = 4;
+    }
+    ctx.stroke();
+  }
+
+  const yFlapTop = startY;
+  const yH1 = startY + sF;
+  const yH2 = startY + sF + sH;
+  const yFlapBot = startY + sF + sH + sF;
+
+  const xG = startX;
+  const xL1 = startX + sG;
+  const xW1 = xL1 + sL;
+  const xL2 = xW1 + sW;
+  const xW2 = xL2 + sL;
+  const xEnd = xW2 + sW;
+
+  // Draw glue flap tint
+  ctx.fillStyle = 'rgba(217, 119, 6, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(xG, yH1 + 50*scale);
+  ctx.lineTo(xL1, yH1);
+  ctx.lineTo(xL1, yH2);
+  ctx.lineTo(xG, yH2 - 50*scale);
+  ctx.closePath();
+  ctx.fill();
+
+  // Creases
+  drawLine(xL1, yH1, xEnd, yH1, true);
+  drawLine(xL1, yH2, xEnd, yH2, true);
+  drawLine(xL1, yH1, xL1, yH2, true);
+  drawLine(xW1, yH1, xW1, yH2, true);
+  drawLine(xL2, yH1, xL2, yH2, true);
+  drawLine(xW2, yH1, xW2, yH2, true);
+
+  // Cuts
+  drawLine(xG, yH1 + 50*scale, xL1, yH1, false);
+  drawLine(xL1, yH2, xG, yH2 - 50*scale, false);
+  drawLine(xG, yH1 + 50*scale, xG, yH2 - 50*scale, false);
+
+  drawLine(xL1, yH1, xL1, yFlapTop, false);
+  drawLine(xW1, yH1, xW1, yFlapTop, false);
+  drawLine(xL2, yH1, xL2, yFlapTop, false);
+  drawLine(xW2, yH1, xW2, yFlapTop, false);
+  drawLine(xEnd, yH1, xEnd, yFlapTop, false);
+
+  drawLine(xL1, yFlapTop, xEnd, yFlapTop, false);
+
+  drawLine(xL1, yH2, xL1, yFlapBot, false);
+  drawLine(xW1, yH2, xW1, yFlapBot, false);
+  drawLine(xL2, yH2, xL2, yFlapBot, false);
+  drawLine(xW2, yH2, xW2, yFlapBot, false);
+  drawLine(xEnd, yH2, xEnd, yFlapBot, false);
+
+  drawLine(xL1, yFlapBot, xEnd, yFlapBot, false);
+
+  // Right edge of the body panel — the free edge that meets the glue tab when
+  // folded. Without it the blank is left open down its whole right side.
+  drawLine(xEnd, yH1, xEnd, yH2, false);
+
+  // Text annotations
+  ctx.fillStyle = '#64748B';
+  ctx.font = '28px IBM Plex Mono, "Malgun Gothic", monospace';
+  ctx.textAlign = 'center';
+  ctx.setLineDash([]);
+  
+  ctx.fillText(`장(L): ${L} mm`, xL1 + sL/2, yH1 + sH/2 + 8);
+  ctx.fillText(`폭(W): ${W} mm`, xW1 + sW/2, yH1 + sH/2 + 8);
+  ctx.fillText(`고(H): ${H} mm`, xEnd + 90, yH1 + sH/2 + 8);
+  ctx.fillText(`W/2: ${Math.round(W/2)} mm`, xL1 + sL/2, yH1 - 30);
+
+  // Legend Box
+  ctx.strokeStyle = '#CBD5E1';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(2150, 1750, 670, 200);
+  
+  // Cut Legend
+  ctx.strokeStyle = '#EF4444';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(2200, 1810);
+  ctx.lineTo(2300, 1810);
+  ctx.stroke();
+  
+  ctx.fillStyle = '#0F172A';
+  ctx.font = '24px "Malgun Gothic", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText("자르는 선 (Cut)", 2340, 1820);
+  
+  // Crease Legend
+  ctx.strokeStyle = '#0284C7';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(2200, 1910);
+  ctx.lineTo(2300, 1910);
+  ctx.stroke();
+  
+  ctx.fillStyle = '#0F172A';
+  ctx.fillText("접는 선 (Crease)", 2340, 1920);
+
+  // Save to PDF
+  const imgData = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l', 'mm', 'a4');
+  doc.addImage(imgData, 'PNG', 0, 0, 297, 210);
+  doc.save(`칼선도면_${prodName.replace(/\s+/g, '_')}.pdf`);
+}
+
+// ---------- LocalStorage Save/Load Histroy System ----------
+function saveCurrentDesign() {
+  let name = $('prodName').value.trim();
+  if(!name) {
+    alert("제품명을 입력해주세요! 제품명으로 저장됩니다.");
+    return;
+  }
+
+  const design = {
+    name: name,
+    date: new Date().toLocaleDateString('ko-KR') + " " + new Date().toLocaleTimeString('ko-KR', {hour12:false, hour:'2-digit', minute:'2-digit'}),
+    prodName: $('prodName').value,
+    inL: $('inL').value,
+    inW: $('inW').value,
+    inH: $('inH').value,
+    inWeight: $('inWeight').value,
+    arrX: $('arrX').value,
+    arrY: $('arrY').value,
+    arrZ: $('arrZ').value,
+    autoArrange: $('autoArrange').checked,
+    singleLayer: $('singleLayer').checked,
+    orientFree: $('orientFree').checked,
+    maxCartonWeight: $('maxCartonWeightInput').value,
+    gap: $('gap').value,
+    fluteType: $('fluteType').value,
+    palletType: $('palletType').value,
+    palletL: $('palletL').value,
+    palletW: $('palletW').value,
+    palletH: $('palletH').value,
+    maxHeight: $('maxHeightInput').value,
+    includePalletH: $('includePalletH').checked
+  };
+
+  try {
+    let history = JSON.parse(localStorage.getItem('carton_history')) || [];
+    const idx = history.findIndex(h => h.name === name);
+    if(idx > -1) {
+      history[idx] = design;
+    } else {
+      history.push(design);
+    }
+    localStorage.setItem('carton_history', JSON.stringify(history));
+    loadHistoryList();
+  } catch(e) {
+    console.error("Local storage save fail:", e);
+    alert("브라우저 설정으로 인해 로컬 저장소를 사용할 수 없습니다.");
+  }
+}
+
+function loadHistoryList() {
+  const historyList = $('historyList');
+  try {
+    let history = JSON.parse(localStorage.getItem('carton_history')) || [];
+    if(history.length === 0) {
+      historyList.innerHTML = `<div style="text-align:center;color:var(--ink-faint);padding:10px;font-size:11px;">저장된 이력이 없습니다.</div>`;
+      return;
+    }
+
+    let html = "";
+    history.forEach((h, idx) => {
+      html += `
+        <div class="history-item" onclick="loadDesignByIndex(${idx})">
+          <span class="name">${h.name}</span>
+          <span class="date">${h.date.split(" ")[0]}</span>
+          <span class="del-btn" onclick="deleteHistory(event, ${idx})"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></span>
+        </div>
+      `;
+    });
+    historyList.innerHTML = html;
+    try {
+      lucide.createIcons();
+    } catch(e) {}
+  } catch(e) {
+    historyList.innerHTML = `<div style="text-align:center;color:var(--ink-faint);padding:10px;font-size:11px;">저장 기능을 사용할 수 없습니다. (로컬스토리지 잠김)</div>`;
+  }
+}
+
+function loadDesignByIndex(idx) {
+  try {
+    let history = JSON.parse(localStorage.getItem('carton_history')) || [];
+    const h = history[idx];
+    if(!h) return;
+
+    $('prodName').value = h.prodName;
+    $('inL').value = h.inL;
+    $('inW').value = h.inW;
+    $('inH').value = h.inH;
+    $('arrX').value = h.arrX;
+    $('arrY').value = h.arrY;
+    $('arrZ').value = h.arrZ;
+    $('gap').value = h.gap;
+    $('fluteType').value = h.fluteType;
+    $('palletType').value = h.palletType;
+    $('palletL').value = h.palletL;
+    $('palletW').value = h.palletW;
+    $('palletH').value = h.palletH;
+    $('maxHeight').value = Math.max(300, Math.min(parseInt(h.maxHeight)||1500, 3000));
+    $('maxHeightInput').value = h.maxHeight;
+    $('includePalletH').checked = h.includePalletH;
+    // fields added later — fall back to defaults for older saved entries
+    if (h.inWeight !== undefined) $('inWeight').value = h.inWeight;
+    if (h.maxCartonWeight !== undefined) {
+      $('maxCartonWeightInput').value = h.maxCartonWeight;
+      $('maxCartonWeight').value = Math.max(1, Math.min(parseFloat(h.maxCartonWeight)||15, 30));
+    }
+    $('autoArrange').checked = h.autoArrange !== undefined ? h.autoArrange : false;
+    $('singleLayer').checked = h.singleLayer !== undefined ? h.singleLayer : (String(h.arrZ) === '1');
+    $('orientFree').checked = h.orientFree !== undefined ? h.orientFree : true;
+
+    const isCustom = h.palletType === 'custom';
+    $('palletL').disabled = !isCustom;
+    $('palletW').disabled = !isCustom;
+    $('palletH').disabled = !isCustom;
+
+    syncArrangeUI();
+    recalc();
+  } catch(e) {
+    console.error("Local storage load fail:", e);
+  }
+}
+
+function deleteHistory(event, idx) {
+  event.stopPropagation();
+  try {
+    let history = JSON.parse(localStorage.getItem('carton_history')) || [];
+    history.splice(idx, 1);
+    localStorage.setItem('carton_history', JSON.stringify(history));
+    loadHistoryList();
+  } catch(e) {
+    console.error("Local storage delete fail:", e);
+  }
+}
+</script>
+</body>
+</html>

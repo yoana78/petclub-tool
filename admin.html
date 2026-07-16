@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 - 펫클럽 사내 프로그램</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+        :root {
+            --primary: #f77b47;
+            --secondary: #0c5593;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #f4f6f9;
+            font-family: 'Pretendard', sans-serif;
+        }
+        #login-view {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            width: 100%;
+            max-width: 340px;
+            background: #fff;
+            border-radius: 20px;
+            padding: 36px 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            text-align: center;
+        }
+        .card h1 { font-size: 1.2rem; margin: 0 0 24px; color: #1a1a1a; }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 14px;
+            font-family: inherit;
+        }
+        button.submit {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 10px;
+            background: var(--secondary);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .error { color: #d33; font-size: 0.85rem; min-height: 18px; margin-bottom: 6px; }
+
+        #admin-view { display: none; }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        header span { font-weight: 700; color: #1a1a1a; }
+        .logout-btn {
+            border: 1px solid #ddd;
+            background: #fff;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #555;
+        }
+        main { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+        section { margin-bottom: 40px; }
+        h2 { font-size: 1.1rem; color: #1a1a1a; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.05); }
+        th, td { padding: 12px 16px; text-align: left; font-size: 0.9rem; border-bottom: 1px solid #eee; }
+        th { background: #fafafa; color: #777; font-weight: 600; }
+        tr:last-child td { border-bottom: none; }
+        .empty { color: #999; font-size: 0.9rem; padding: 20px; text-align: center; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .badge.pending { background: #fff3e0; color: #e08a00; }
+        .badge.approved { background: #e6f4ea; color: #1e8e3e; }
+        .action-btn {
+            border: none;
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-right: 6px;
+            font-weight: 600;
+        }
+        .approve-btn { background: var(--primary); color: #fff; }
+        .delete-btn { background: #f1f1f1; color: #d33; }
+    </style>
+</head>
+<body>
+    <div id="login-view">
+        <div class="card">
+            <h1>관리자 로그인</h1>
+            <form id="admin-login-form">
+                <input type="password" id="admin-password" placeholder="관리자 비밀번호" autocomplete="off" required>
+                <div class="error" id="login-error"></div>
+                <button type="submit" class="submit">로그인</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="admin-view">
+        <header>
+            <span>관리자 페이지</span>
+            <button class="logout-btn" onclick="adminLogout()">로그아웃</button>
+        </header>
+        <main>
+            <section>
+                <h2>승인 대기 중</h2>
+                <table id="pending-table">
+                    <thead><tr><th>이름</th><th>신청일</th><th></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <div class="empty" id="pending-empty" style="display:none;">승인 대기 중인 신청이 없습니다.</div>
+            </section>
+            <section>
+                <h2>승인된 사용자</h2>
+                <table id="approved-table">
+                    <thead><tr><th>이름</th><th>상태</th><th>가입일</th><th></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <div class="empty" id="approved-empty" style="display:none;">승인된 사용자가 없습니다.</div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const loginView = document.getElementById('login-view');
+        const adminView = document.getElementById('admin-view');
+
+        document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorEl = document.getElementById('login-error');
+            errorEl.textContent = '';
+            const password = document.getElementById('admin-password').value;
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ password }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    errorEl.textContent = data.error || '로그인에 실패했습니다.';
+                    return;
+                }
+                showAdmin();
+            } catch (err) {
+                errorEl.textContent = '네트워크 오류가 발생했습니다.';
+            }
+        });
+
+        function showAdmin() {
+            loginView.style.display = 'none';
+            adminView.style.display = 'block';
+            loadUsers();
+        }
+
+        async function loadUsers() {
+            const res = await fetch('/api/admin/users', { credentials: 'include' });
+            if (!res.ok) {
+                loginView.style.display = 'flex';
+                adminView.style.display = 'none';
+                return;
+            }
+            const { users } = await res.json();
+            renderUsers(users);
+        }
+
+        function renderUsers(users) {
+            const pending = users.filter((u) => u.status === 'pending');
+            const approved = users.filter((u) => u.status === 'approved');
+
+            const pendingBody = document.querySelector('#pending-table tbody');
+            pendingBody.innerHTML = '';
+            document.getElementById('pending-empty').style.display = pending.length ? 'none' : 'block';
+            pending.forEach((u) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(u.name)}</td>
+                    <td>${escapeHtml(u.created_at)}</td>
+                    <td>
+                        <button class="action-btn approve-btn" data-id="${u.id}" data-action="approve">승인</button>
+                        <button class="action-btn delete-btn" data-id="${u.id}" data-action="delete">거절</button>
+                    </td>`;
+                pendingBody.appendChild(tr);
+            });
+
+            const approvedBody = document.querySelector('#approved-table tbody');
+            approvedBody.innerHTML = '';
+            document.getElementById('approved-empty').style.display = approved.length ? 'none' : 'block';
+            approved.forEach((u) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(u.name)}</td>
+                    <td><span class="badge approved">사용 가능</span></td>
+                    <td>${escapeHtml(u.created_at)}</td>
+                    <td><button class="action-btn delete-btn" data-id="${u.id}" data-action="delete">삭제</button></td>`;
+                approvedBody.appendChild(tr);
+            });
+
+            document.querySelectorAll('.action-btn').forEach((btn) => {
+                btn.addEventListener('click', () => handleAction(btn.dataset.id, btn.dataset.action));
+            });
+        }
+
+        async function handleAction(id, action) {
+            const endpoint = action === 'approve' ? '/api/admin/approve' : '/api/admin/delete';
+            await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ id: Number(id) }),
+            });
+            loadUsers();
+        }
+
+        function adminLogout() {
+            fetch('/api/admin/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+                adminView.style.display = 'none';
+                loginView.style.display = 'flex';
+            });
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str ?? '';
+            return div.innerHTML;
+        }
+
+        // 이미 로그인된 관리자 세션이 있으면 바로 표시
+        fetch('/api/admin/users', { credentials: 'include' }).then((res) => {
+            if (res.ok) showAdmin();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가입하기 - 펫클럽 사내 프로그램</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+        :root {
+            --primary: #f77b47;
+            --secondary: #0c5593;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(160deg, #0c5593 0%, #08356b 100%);
+            font-family: 'Pretendard', sans-serif;
+        }
+        .card {
+            width: 100%;
+            max-width: 360px;
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 40px 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            text-align: center;
+        }
+        .logo { width: 88px; margin-bottom: 20px; }
+        h1 { font-size: 1.3rem; margin: 0 0 8px; color: #1a1a1a; }
+        .desc { font-size: 0.85rem; color: #777; margin-bottom: 24px; }
+        label { display: block; text-align: left; font-size: 0.85rem; color: #555; margin-bottom: 6px; }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 18px;
+            font-family: inherit;
+        }
+        input:focus { outline: none; border-color: var(--primary); }
+        button.submit {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button.submit:disabled { opacity: 0.6; cursor: default; }
+        .login-link {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .login-link a { color: var(--secondary); font-weight: 600; text-decoration: none; }
+        .error {
+            color: #d33;
+            font-size: 0.85rem;
+            min-height: 18px;
+            margin: -8px 0 12px;
+            text-align: left;
+        }
+        .success {
+            display: none;
+        }
+        .success.show {
+            display: block;
+        }
+        .success p { color: #333; font-size: 0.95rem; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="card" id="card">
+        <img class="logo" src="image/logo.png" alt="펫클럽 로고">
+        <h1>사내 프로그램 가입</h1>
+        <p class="desc">이름과 숫자 4자리 비밀번호만 입력하면 됩니다. 별도 개인정보는 수집하지 않습니다.</p>
+
+        <form id="register-form">
+            <label for="name">이름</label>
+            <input type="text" id="name" autocomplete="off" required>
+            <label for="pin">비밀번호 (숫자 4자리)</label>
+            <input type="password" id="pin" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" required>
+            <label for="pin2">비밀번호 확인</label>
+            <input type="password" id="pin2" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" required>
+            <div class="error" id="error"></div>
+            <button type="submit" class="submit" id="submit-btn">가입 신청</button>
+        </form>
+
+        <div class="success" id="success">
+            <p>가입 신청이 접수되었습니다.<br>관리자 승인 후 로그인하실 수 있습니다.</p>
+        </div>
+
+        <div class="login-link"><a href="login.html">로그인 화면으로 돌아가기</a></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('register-form');
+        const errorEl = document.getElementById('error');
+        const submitBtn = document.getElementById('submit-btn');
+        const successEl = document.getElementById('success');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorEl.textContent = '';
+            const name = document.getElementById('name').value.trim();
+            const pin = document.getElementById('pin').value.trim();
+            const pin2 = document.getElementById('pin2').value.trim();
+
+            if (!/^\d{4}$/.test(pin)) {
+                errorEl.textContent = '비밀번호는 숫자 4자리로 입력해주세요.';
+                return;
+            }
+            if (pin !== pin2) {
+                errorEl.textContent = '비밀번호가 일치하지 않습니다.';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, pin }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    errorEl.textContent = data.error || '가입에 실패했습니다.';
+                    return;
+                }
+                form.style.display = 'none';
+                successEl.classList.add('show');
+            } catch (err) {
+                errorEl.textContent = '네트워크 오류가 발생했습니다.';
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

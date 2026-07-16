@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>펫클럽 사내 프로그램</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+        :root {
+            --primary: #f77b47;
+            --black: #000000;
+        }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: var(--black);
+            font-family: 'Pretendard', sans-serif;
+        }
+        #intro {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--black);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .welcome-subtitle {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1rem;
+            font-weight: 500;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeUp 1.2s forwards 0.3s;
+            margin-bottom: 32px;
+        }
+        .intro-logo {
+            width: 180px;
+            height: auto;
+            object-fit: contain;
+            opacity: 0;
+            transform: scale(0.9);
+            animation: logoScale 1.5s forwards 0.8s;
+            filter: drop-shadow(0 4px 15px rgba(255, 255, 255, 0.1));
+        }
+        @keyframes fadeUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes logoScale {
+            to { opacity: 1; transform: scale(1); }
+        }
+        @media (max-width: 768px) {
+            .intro-logo { width: 130px; }
+            .welcome-subtitle { font-size: 0.85rem; letter-spacing: 0.2em; }
+        }
+    </style>
+</head>
+<body>
+    <div id="intro" onclick="goLogin()">
+        <span class="welcome-subtitle">PET CLUB INTERNAL TOOLS</span>
+        <img class="intro-logo" src="image/logo.png" alt="펫클럽 로고">
+    </div>
+
+    <script>
+        const timer = setTimeout(goLogin, 2500);
+        function goLogin() {
+            clearTimeout(timer);
+            location.href = 'login.html';
+        }
+    </script>
+</body>
+</html>

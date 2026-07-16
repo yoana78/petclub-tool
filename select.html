@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로그램 선택 - 펫클럽 사내 프로그램</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <script>
+        fetch('/api/me', { credentials: 'include' }).then((r) => {
+            if (!r.ok) location.replace('login.html');
+        });
+    </script>
+    <style>
+        :root {
+            --primary: #f77b47;
+            --secondary: #0c5593;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #f4f6f9;
+            font-family: 'Pretendard', sans-serif;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 32px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        header .brand { display: flex; align-items: center; gap: 10px; }
+        header img { width: 32px; height: auto; }
+        header .brand span { font-weight: 700; color: #1a1a1a; }
+        #user-greeting { font-size: 0.9rem; color: #555; }
+        .logout-btn {
+            border: 1px solid #ddd;
+            background: #fff;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #555;
+        }
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+        h1 { text-align: center; font-size: 1.6rem; color: #1a1a1a; margin-bottom: 40px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+        }
+        .program-card {
+            display: block;
+            background: #fff;
+            border-radius: 16px;
+            padding: 32px 24px;
+            text-decoration: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .program-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 32px rgba(0,0,0,0.1);
+        }
+        .program-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(247, 123, 71, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+        }
+        .program-title { font-size: 1.1rem; font-weight: 700; color: #1a1a1a; margin: 0 0 8px; }
+        .program-desc { font-size: 0.9rem; color: #777; margin: 0; line-height: 1.5; }
+        footer { text-align: center; padding: 24px; font-size: 0.8rem; color: #aaa; }
+        footer a { color: #aaa; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <img src="image/logo.png" alt="펫클럽 로고">
+            <span>펫클럽 사내 프로그램</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px;">
+            <span id="user-greeting"></span>
+            <button class="logout-btn" onclick="logout()">로그아웃</button>
+        </div>
+    </header>
+
+    <main>
+        <h1>사용할 프로그램을 선택하세요</h1>
+        <div class="grid">
+            <a class="program-card" href="carton-box-designer.html">
+                <div class="program-icon">📦</div>
+                <h2 class="program-title">카톤박스 사이즈 계산</h2>
+                <p class="program-desc">제품 규격에 맞는 카톤박스 사이즈를 계산합니다.</p>
+            </a>
+            <a class="program-card" href="pallet-loading-optimizer.html">
+                <div class="program-icon">🧱</div>
+                <h2 class="program-title">팔레트 적재 계산</h2>
+                <p class="program-desc">팔레트에 최적으로 적재 가능한 수량을 계산합니다.</p>
+            </a>
+        </div>
+    </main>
+
+    <footer><a href="admin.html">관리자</a></footer>
+
+    <script>
+        fetch('/api/me', { credentials: 'include' })
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => {
+                if (data) document.getElementById('user-greeting').textContent = `${data.name}님`;
+            });
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+                location.href = 'login.html';
+            });
+        }
+    </script>
+</body>
+</html>
